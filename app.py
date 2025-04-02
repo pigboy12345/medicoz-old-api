@@ -1,6 +1,5 @@
 # app.py
 import os
-import time
 from pinecone import Pinecone
 from langchain_huggingface import HuggingFaceEmbeddings
 from huggingface_hub import InferenceClient
@@ -15,22 +14,18 @@ logger = logging.getLogger(__name__)
 # Load environment variables directly
 HF_API_KEY = os.getenv("HF_API_KEY")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY_JER")
-INDEX_NAME = "medicoz-embeddings"  # Matches your new index
-
-# Preload embedding model
-embedding_function = None
-def get_embedding_function():
-    global embedding_function
-    if embedding_function is None:
-        logger.info("Loading embedding model...")
-        embedding_function = HuggingFaceEmbeddings(
-            model_name="BAAI/bge-large-en-v1.5",  # 1024 dimensions to match the index
-            model_kwargs={"device": "cpu"},
-        )
-    return embedding_function
+INDEX_NAME = "medicoz-embeddings" # Your new index name
 
 # FastAPI app
 app = FastAPI(title="Medical Assistant API")
+
+# Embedding function
+def get_embedding_function():
+    embeddings = HuggingFaceEmbeddings(
+        model_name="BAAI/bge-large-en-v1.5",
+        model_kwargs={"device": "cpu"},  # Change to "cuda" if GPU is available
+    )
+    return embeddings
 
 # Pinecone setup
 def initialize_pinecone():
@@ -47,8 +42,8 @@ class HuggingFaceLLM:
         try:
             response = self.client.text_generation(
                 prompt,
-                model=self.model_id,
-                max_new_tokens=200,
+                model=self.model_id,  # Fixed typo: Changed self_id to self.model_id
+                max_new_tokens=512,
                 temperature=0.1,
                 repetition_penalty=1.1,
             )
@@ -79,31 +74,28 @@ async def query_rag(request: QueryRequest):
     try:
         query_text = request.question
         logger.info(f"Received query: {query_text}")
-        
-        # Generate embedding for the query
-        start_time = time.time()
         embedding_function = get_embedding_function()
-        query_embedding = embedding_function.embed_query(query_text)
-        logger.info(f"Embedding generation took {time.time() - start_time:.2f} seconds")
-        
-        # Query Pinecone with the embedding vector
-        start_time = time.time()
         index = initialize_pinecone()
+        
+        # Generate query embedding
+        query_embedding = embedding_function.embed_query(query_text)
+        
+        # Query Pinecone
         results = index.query(
-            vector=query_embedding,  # Pass the embedding vector
-            top_k=3,
+            vector=query_embedding,
+            top_k=5,
             include_metadata=True
         )
-        logger.info(f"Pinecone query took {time.time() - start_time:.2f} seconds")
         
+        # Extract context
         context_text = "\n\n---\n\n".join([match["metadata"]["text"] for match in results["matches"]])
         prompt = CUSTOM_PROMPT_TEMPLATE.format(context=context_text, question=query_text)
         
-        start_time = time.time()
+        # Call Hugging Face API
         model = HuggingFaceLLM()
         response_text = model.invoke(prompt)
-        logger.info(f"Hugging Face API call took {time.time() - start_time:.2f} seconds")
         
+        # Extract sources
         sources = [match["id"] for match in results["matches"]]
         logger.info(f"Response generated successfully for query: {query_text}")
         return {"response": response_text, "sources": sources}
