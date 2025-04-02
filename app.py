@@ -39,7 +39,7 @@ def initialize_pinecone():
 
 # Hugging Face Inference Client
 class HuggingFaceLLM:
-    def __init__(self, model_id="google/gemma-2b-it", api_key=HF_API_KEY):
+    def __init__(self, model_id="mistralai/Mistral-7B-Instruct-v0.2", api_key=HF_API_KEY):
         self.model_id = model_id
         self.client = InferenceClient(token=api_key)
     
