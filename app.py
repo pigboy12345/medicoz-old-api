@@ -2,6 +2,7 @@
 import os
 import time
 from pinecone import Pinecone
+from langchain_huggingface import HuggingFaceEmbeddings
 from huggingface_hub import InferenceClient
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -14,7 +15,19 @@ logger = logging.getLogger(__name__)
 # Load environment variables directly
 HF_API_KEY = os.getenv("HF_API_KEY")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY_JER")
-INDEX_NAME = "medicoz-embeddings"  # Updated to match the new index
+INDEX_NAME = "medicoz-embeddings"  # Matches your new index
+
+# Preload embedding model
+embedding_function = None
+def get_embedding_function():
+    global embedding_function
+    if embedding_function is None:
+        logger.info("Loading embedding model...")
+        embedding_function = HuggingFaceEmbeddings(
+            model_name="BAAI/bge-large-en-v1.5",  # 1024 dimensions to match the index
+            model_kwargs={"device": "cpu"},
+        )
+    return embedding_function
 
 # FastAPI app
 app = FastAPI(title="Medical Assistant API")
@@ -35,7 +48,7 @@ class HuggingFaceLLM:
             response = self.client.text_generation(
                 prompt,
                 model=self.model_id,
-                max_new_tokens=200,  # Reduced for faster response
+                max_new_tokens=200,
                 temperature=0.1,
                 repetition_penalty=1.1,
             )
@@ -67,11 +80,17 @@ async def query_rag(request: QueryRequest):
         query_text = request.question
         logger.info(f"Received query: {query_text}")
         
+        # Generate embedding for the query
+        start_time = time.time()
+        embedding_function = get_embedding_function()
+        query_embedding = embedding_function.embed_query(query_text)
+        logger.info(f"Embedding generation took {time.time() - start_time:.2f} seconds")
+        
+        # Query Pinecone with the embedding vector
         start_time = time.time()
         index = initialize_pinecone()
-        # Query Pinecone with raw text; Pinecone will use llama-text-embed-v2 to embed the query
         results = index.query(
-            query=query_text,  # Pass raw text instead of a vector
+            vector=query_embedding,  # Pass the embedding vector
             top_k=3,
             include_metadata=True
         )
