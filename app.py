@@ -47,7 +47,7 @@ class HuggingFaceLLM:
         self.model_id = model_id
         self.client = InferenceClient(token=api_key)
     
-    def invoke(self, prompt, timeout=30):
+    def invoke(self, prompt):
         try:
             response = self.client.text_generation(
                 prompt,
@@ -55,12 +55,11 @@ class HuggingFaceLLM:
                 max_new_tokens=512,
                 temperature=0.1,
                 repetition_penalty=1.1,
-                timeout=timeout
             )
             return response
         except Exception as e:
-            logger.error(f"Model inference error with {self.model_id}: {str(e)}")
-            return None
+            logger.error(f"Error when calling Hugging Face API with model {self.model_id}: {str(e)}")
+            return None  # Return None instead of error message to handle in caller
 
 # Prompt template
 CUSTOM_PROMPT_TEMPLATE = """<s>[INST] You are a medical assistant specialized in providing accurate information based on medical documents. Use the following context to answer the question:
@@ -73,6 +72,13 @@ Question: {question}
 
 Answer based solely on the provided context. If the answer is not clear from the context, state: "I cannot determine the answer based on the available context." [/INST]"""
 
+# Simplified prompt for fallback model
+FALLBACK_PROMPT_TEMPLATE = """<s>[INST] You are a medical assistant. Answer this medical question to the best of your knowledge:
+
+Question: {question}
+
+Provide a concise and accurate answer. If you're uncertain, acknowledge the limitations of your response. [/INST]"""
+
 # Request model
 class QueryRequest(BaseModel):
     question: str
@@ -82,12 +88,9 @@ class QueryRequest(BaseModel):
 async def query_rag(request: QueryRequest):
     if not HF_API_KEY or not PINECONE_API_KEY:
         raise HTTPException(status_code=500, detail="Missing API keys in environment variables")
-    
     try:
         query_text = request.question
         logger.info(f"Received query: {query_text}")
-        
-        # Initialize components
         embedding_function = get_embedding_function()
         index = initialize_pinecone()
         
@@ -102,48 +105,57 @@ async def query_rag(request: QueryRequest):
         )
         
         # Extract context
-        context_text = "\n\n---\n\n".join([match["metadata"].get("text", "") for match in results["matches"] if "metadata" in match and "text" in match["metadata"]])
+        try:
+            context_text = "\n\n---\n\n".join([match["metadata"]["text"] for match in results["matches"]])
+            prompt = CUSTOM_PROMPT_TEMPLATE.format(context=context_text, question=query_text)
+        except KeyError as e:
+            logger.warning(f"Error extracting context: {str(e)}")
+            context_text = "No relevant context found."
+            prompt = CUSTOM_PROMPT_TEMPLATE.format(context=context_text, question=query_text)
         
-        # Handle empty context
-        if not context_text.strip():
-            logger.warning("No valid context found in Pinecone results")
-            context_text = "No relevant medical information found."
+        # Call primary Hugging Face model
+        model = HuggingFaceLLM()
+        response_text = model.invoke(prompt)
         
-        # Format prompt
-        prompt = CUSTOM_PROMPT_TEMPLATE.format(context=context_text, question=query_text)
+        # Check if primary model response is valid
+        needs_fallback = False
+        if response_text is None:
+            needs_fallback = True
+            logger.warning("Primary model returned None response")
+        elif isinstance(response_text, str) and ("I cannot determine the answer" in response_text or 
+                                               "Error when calling" in response_text or 
+                                               len(response_text.strip()) < 10):
+            needs_fallback = True
+            logger.warning(f"Primary model returned unsatisfactory response: {response_text[:100]}")
         
-        # Primary model inference with timeout
-        primary_model = HuggingFaceLLM()
-        response_text = primary_model.invoke(prompt)
-        
-        # If primary model fails or returns unsatisfactory answer, try fallback model
-        if not response_text or "I cannot determine the answer based on the available context." in response_text:
-            logger.info("Primary model couldn't provide a satisfactory answer. Trying fallback model.")
+        # Use fallback model if needed
+        if needs_fallback:
             try:
-                # Using a smaller, more reliable model as fallback
-                fallback_model = HuggingFaceLLM(model_id="google/flan-t5-large")
-                
-                # For fallback, we'll use a simpler prompt to avoid context length issues
-                fallback_prompt = f"<s>[INST] Question about medical topic: {query_text} [/INST]"
-                
+                logger.info("Using fallback model")
+                # Use smaller T5 model for fallback
+                fallback_model = HuggingFaceLLM(model_id="google/flan-t5-base")
+                fallback_prompt = FALLBACK_PROMPT_TEMPLATE.format(question=query_text)
                 fallback_response = fallback_model.invoke(fallback_prompt)
-                if fallback_response:
+                
+                if fallback_response and isinstance(fallback_response, str) and len(fallback_response.strip()) > 10:
                     response_text = fallback_response
-                    logger.info("Successfully received response from fallback model")
+                    logger.info("Successfully used fallback model")
                 else:
-                    # If fallback also fails, provide a generic response rather than failing
-                    response_text = "I apologize, but I'm unable to provide an answer at this time."
-                    logger.warning("Both primary and fallback models failed to provide a response")
-            except Exception as fallback_error:
-                logger.error(f"Fallback model error: {str(fallback_error)}")
-                response_text = "I apologize, but I'm unable to provide an answer at this time."
+                    # If fallback also fails, use a safe default response
+                    logger.warning("Fallback model also failed")
+                    response_text = "I don't have enough information to answer this medical question accurately."
+            except Exception as fallback_err:
+                logger.error(f"Error with fallback model: {str(fallback_err)}")
+                response_text = "I don't have enough information to answer this medical question accurately."
+        
+        # Ensure response_text is a string
+        if not isinstance(response_text, str):
+            response_text = str(response_text)
         
         # Extract sources
-        sources = [match.get("id", "") for match in results.get("matches", [])]
-        
+        sources = [match["id"] for match in results["matches"]]
         logger.info(f"Response generated successfully for query: {query_text}")
         return {"response": response_text, "sources": sources}
-    
     except Exception as e:
         logger.error(f"Error processing query: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing query: {str(e)}")
