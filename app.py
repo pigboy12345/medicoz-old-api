@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)  # Fixed: using __name__ instead of name
+logger = logging.getLogger(__name__)
 
 # Load environment variables directly
 HF_API_KEY = os.getenv("HF_API_KEY")
@@ -22,10 +22,10 @@ app = FastAPI(title="Medical Assistant API")
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "*", "https://3000-idx-medicozgit-1743525220848.cluster-bec2e4635ng44w7ed22sa22hes.cloudworkstations.dev/"],
+    allow_origins=["http://localhost:3000","*","https://3000-idx-medicozgit-1743525220848.cluster-bec2e4635ng44w7ed22sa22hes.cloudworkstations.dev/"],
     allow_credentials=True,
-    allow_methods=["*"],  # Fixed: empty list to include all methods
-    allow_headers=["*"],  # Fixed: empty list to include all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Embedding function
@@ -43,7 +43,7 @@ def initialize_pinecone():
 
 # Hugging Face Inference Client
 class HuggingFaceLLM:
-    def __init__(self, model_id="mistralai/Mistral-7B-Instruct-v0.2", api_key=HF_API_KEY):  # Fixed: __init__ not init
+    def __init__(self, model_id="mistralai/Mistral-7B-Instruct-v0.2", api_key=HF_API_KEY):
         self.model_id = model_id
         self.client = InferenceClient(token=api_key)
     
@@ -51,14 +51,13 @@ class HuggingFaceLLM:
         try:
             response = self.client.text_generation(
                 prompt,
-                model=self.model_id,
+                model=self.model_id,  # Fixed typo: Changed self_id to self.model_id
                 max_new_tokens=512,
                 temperature=0.1,
                 repetition_penalty=1.1,
             )
             return response
         except Exception as e:
-            logger.error(f"Error when calling Hugging Face API: {str(e)}")
             return f"Error when calling Hugging Face API: {str(e)}"
 
 # Prompt template
@@ -99,7 +98,7 @@ async def query_rag(request: QueryRequest):
         
         # Extract context
         context_text = "\n\n---\n\n".join([match["metadata"]["text"] for match in results["matches"]])
-        prompt = CUSTOM_PROMPT_TEMPLATE.format(context=context_context=context_text, question=query_text)
+        prompt = CUSTOM_PROMPT_TEMPLATE.format(context=context_text, question=query_text)
         
         # Call Hugging Face API
         model = HuggingFaceLLM()
@@ -119,7 +118,7 @@ async def health_check():
     logger.info("Health check requested")
     return {"status": "healthy"}
 
-if __name__ == "__main__":  # Fixed: __name__ not name
+if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))  # Use Railway's PORT if available, else 8000
     uvicorn.run(app, host="0.0.0.0", port=port)
