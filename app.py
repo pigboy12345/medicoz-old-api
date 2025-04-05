@@ -51,7 +51,7 @@ class HuggingFaceLLM:
         try:
             response = self.client.text_generation(
                 prompt,
-                model=self.model_id,  # Fixed typo: Changed self_id to self.model_id
+                model=self.model_id,
                 max_new_tokens=512,
                 temperature=0.1,
                 repetition_penalty=1.1,
@@ -102,8 +102,14 @@ async def query_rag(request: QueryRequest):
         
         # Call Hugging Face API
         model = HuggingFaceLLM()
+        fallback_model = HuggingFaceLLM(model_id="google/flan-t5-xxl")
         response_text = model.invoke(prompt)
         
+        #quality check
+        if "I cannot determine the answer based on the available context." in response_text or response_text == "":
+            fallback_response = fallback_model.invoke(query_text)
+            response_text = fallback_response
+
         # Extract sources
         sources = [match["id"] for match in results["matches"]]
         logger.info(f"Response generated successfully for query: {query_text}")
