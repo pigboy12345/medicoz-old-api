@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 
 # Load environment variables directly
 HF_API_KEY = os.getenv("HF_API_KEY")
-PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
-INDEX_NAME = "medical-docs"
+PINECONE_API_KEY = os.getenv("PINECONE_API_KEY_JER")
+INDEX_NAME = "medicoz-embeddings"
 
 # FastAPI app
 app = FastAPI(title="Medical Assistant API")
