@@ -6,8 +6,6 @@ from fastapi import FastAPI, HTTPException
 # from fastapi.middleware.cors import CORSMiddleware  # Import CORS middleware
 from pydantic import BaseModel
 import logging
-# from dotenv import load_dotenv
-# load_dotenv()
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -120,5 +118,5 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", 8000))  # Use Railway's PORT if available, else 8000
+    port = int(os.getenv("PORT", 8080))  # Use Railway's PORT if available, else 8000
     uvicorn.run(app, host="0.0.0.0", port=port)
