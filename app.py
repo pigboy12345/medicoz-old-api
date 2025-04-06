@@ -3,7 +3,7 @@ from pinecone import Pinecone
 from langchain_huggingface import HuggingFaceEmbeddings
 from huggingface_hub import InferenceClient
 from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware  # Import CORS middleware
+# from fastapi.middleware.cors import CORSMiddleware  # Import CORS middleware
 from pydantic import BaseModel
 import logging
 # from dotenv import load_dotenv
@@ -20,14 +20,14 @@ INDEX_NAME = "medicoz-embeddings" # Your new index name
 # FastAPI app
 app = FastAPI(title="Medical Assistant API")
 
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000","*","https://3000-idx-medicozgit-1743525220848.cluster-bec2e4635ng44w7ed22sa22hes.cloudworkstations.dev"],  # Allow your Next.js app's origin
-    allow_credentials=True,
-    allow_methods=["*"],  # Allow all HTTP methods (GET, POST, OPTIONS, etc.)
-    allow_headers=["*"],  # Allow all headers
-)
+# # Add CORS middleware
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["http://localhost:3000","*","https://3000-idx-medicozgit-1743525220848.cluster-bec2e4635ng44w7ed22sa22hes.cloudworkstations.dev"],  # Allow your Next.js app's origin
+#     allow_credentials=True,
+#     allow_methods=["*"],  # Allow all HTTP methods (GET, POST, OPTIONS, etc.)
+#     allow_headers=["*"],  # Allow all headers
+# )
 # Embedding function
 def get_embedding_function():
     embeddings = HuggingFaceEmbeddings(
