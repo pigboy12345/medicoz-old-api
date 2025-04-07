@@ -36,9 +36,20 @@ def get_embedding_function():
     return embeddings
 
 # Pinecone setup
+# def initialize_pinecone():
+#     pc = Pinecone(api_key=PINECONE_API_KEY)
+#     return pc.Index(INDEX_NAME)
+
 def initialize_pinecone():
-    pc = Pinecone(api_key=PINECONE_API_KEY)
-    return pc.Index(INDEX_NAME)
+    logger.info(f"Attempting to initialize Pinecone with API Key: {PINECONE_API_KEY} and Index Name: {INDEX_NAME}")
+    try:
+        pc = Pinecone(api_key=PINECONE_API_KEY)
+        index = pc.Index(INDEX_NAME)
+        logger.info(f"Pinecone index '{index}' initialized successfully.")
+        return index
+    except Exception as e:
+        logger.error(f"Error initializing Pinecone: {str(e)}")
+        return None  # Return None to indicate failure
 
 # Hugging Face Inference Client
 class HuggingFaceLLM:
