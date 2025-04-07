@@ -117,6 +117,25 @@ async def health_check():
     logger.info("Health check requested")
     return {"status": "healthy"}
 
+@app.get("/test_pinecone")
+async def test_pinecone_connection():
+    try:
+        index = initialize_pinecone()
+        return {"status": "Pinecone connected successfully", "index_name": index.name}
+    except Exception as e:
+        logger.error(f"Pinecone connection test failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Pinecone connection test failed: {str(e)}")
+
+@app.get("/test_huggingface")
+async def test_huggingface_connection():
+    try:
+        model = HuggingFaceLLM()
+        response = model.invoke("This is a test prompt.")
+        return {"status": "Hugging Face API call successful", "response": response}
+    except Exception as e:
+        logger.error(f"Hugging Face API test failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Hugging Face API test failed: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))  # Use Railway's PORT if available, else 8000
